@@ -1,0 +1,29 @@
+{
+  "dependencies": {
+    "appInsights1": {
+      "type": "appInsights"
+    },
+    "storage1": {
+      "type": "storage",
+      "connectionId": "AzureWebJobsStorage"
+    },
+    "secrets1": {
+      "type": "secrets"
+    },
+    "storage2": {
+      "type": "storage",
+      "connectionId": "con_str",
+      "dynamicId": null
+    },
+    "storage3": {
+      "type": "storage",
+      "connectionId": "conn_str2",
+      "dynamicId": null
+    },
+    "secrets2": {
+      "type": "secrets",
+      "connectionId": "VaultUri",
+      "dynamicId": null
+    }
+  }
+}
