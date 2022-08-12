@@ -22,7 +22,8 @@ namespace FunctionApp_unzipDecrypt
             log.LogInformation($"C# Blob trigger function Processing blob\n Name:{name} \n Size: {myBlob.Length} Bytes");
             string privateKeyBase64 = Environment.GetEnvironmentVariable("pgp-private-key");
             string passPhrase = Environment.GetEnvironmentVariable("pgp-passphrase");
-
+            log.LogInformation($"private key {privateKeyBase64}");
+            log.LogInformation($"pass key {passPhrase}");
             if (string.IsNullOrEmpty(privateKeyBase64))
             {
                 log.LogInformation($"Please add a base64 encoded private key to an environment variable called pgp-private-key");
