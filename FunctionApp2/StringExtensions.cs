@@ -6,7 +6,7 @@ namespace FunctionApp_unzipDecrypt
     {
         public static Stream ToStream(this string str)
         {
-            MemoryStream stream = new MemoryStream();
+            var stream = new MemoryStream();
             StreamWriter writer = new StreamWriter(stream);
             writer.Write(str);
             writer.Flush();

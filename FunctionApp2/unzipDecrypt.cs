@@ -21,9 +21,11 @@ namespace FunctionApp_unzipDecrypt
         {
             log.LogInformation($"C# Blob trigger function Processing blob\n Name:{name} \n Size: {myBlob.Length} Bytes");
             string privateKeyBase64 = Environment.GetEnvironmentVariable("pgp-private-key");
-            string passPhrase = Environment.GetEnvironmentVariable("pgp-passphrase");
-            log.LogInformation($"private key {privateKeyBase64}");
-            log.LogInformation($"pass key {passPhrase}");
+            string publicKeyBase64 = Environment.GetEnvironmentVariable("pgp-public-key");
+            //string passPhrase = Environment.GetEnvironmentVariable("pgp-passphrase");
+            string passPhrase = null;
+            //log.LogInformation($"private key {privateKeyBase64}");
+            //log.LogInformation($"pass key {passPhrase}");
             if (string.IsNullOrEmpty(privateKeyBase64))
             {
                 log.LogInformation($"Please add a base64 encoded private key to an environment variable called pgp-private-key");
@@ -31,13 +33,37 @@ namespace FunctionApp_unzipDecrypt
 
             byte[] privateKeyBytes = Convert.FromBase64String(privateKeyBase64);
             string privateKey = Encoding.UTF8.GetString(privateKeyBytes);
-            
+
+            byte[] publicKeyBytes = Convert.FromBase64String(publicKeyBase64);
+            string publicKey = Encoding.UTF8.GetString(publicKeyBytes);
+            if (name.Substring(name.Length - 4).ToLower() == ".xml")
+            {
+                Stream encryptedData = null;
+                try
+                {
+                    encryptedData = await EncryptAsync(myBlob, publicKey, passPhrase);
+                    string connStr = Environment.GetEnvironmentVariable("AzureWebJobsStorage");
+                    string toContainer = Environment.GetEnvironmentVariable("ToContainer");
+                    BlockBlobClient blobClient = new BlockBlobClient(connStr, toContainer, name + "encrypt");
+                    await blobClient.UploadAsync(encryptedData);
+                    //return new OkObjectResult(decryptedData);
+                }
+                catch(Exception ex)
+                {
+                    log.LogInformation("Error processing encryption", ex.ToString());
+                }
+            }
+
             Stream decryptedData = null;
                 try
                 {
-                     decryptedData = await DecryptAsync(myBlob, privateKey, passPhrase);
-                    //return new OkObjectResult(decryptedData);
-                }
+                    decryptedData = await DecryptAsync(myBlob, privateKey, passPhrase);
+                    string connStr = Environment.GetEnvironmentVariable("AzureWebJobsStorage");
+                    string toContainer = Environment.GetEnvironmentVariable("ToContainer");
+                    BlockBlobClient blobClient = new BlockBlobClient(connStr, toContainer, name+"decrypt");
+                    await blobClient.UploadAsync(decryptedData);
+                //return new OkObjectResult(decryptedData);
+            }
                 catch (PgpException pgpException)
                 {
                     //return new BadRequestObjectResult(pgpException.Message);
@@ -54,10 +80,12 @@ namespace FunctionApp_unzipDecrypt
                     using (MemoryStream zipBlobFileStream = new MemoryStream())
                     {
                         //await myBlob.CopyToAsync(zipBlobFileStream);
-                        decryptedData.CopyTo(zipBlobFileStream);
-                        await zipBlobFileStream.FlushAsync();
-                        zipBlobFileStream.Position = 0;
-                        
+                        //decryptedData.CopyTo(zipBlobFileStream);
+                        //await zipBlobFileStream.FlushAsync();
+                        //zipBlobFileStream.Position = 0;
+
+                        decryptedData.Flush();
+                        decryptedData.Position = 0;
                         using (ZipArchive archive = new ZipArchive(decryptedData))
                         {
                             foreach (ZipArchiveEntry entry in archive.Entries)
@@ -91,19 +119,45 @@ namespace FunctionApp_unzipDecrypt
 
         private static async Task<Stream> DecryptAsync(Stream inputStream, string privateKey, string passPhrase)
         {
-            using (PGP pgp = new PGP())
+            EncryptionKeys encryptionKeys;
+            using (Stream privateKeyStream = privateKey.ToStream())
+                encryptionKeys = new EncryptionKeys(privateKeyStream,"dummy");
+
+            using (PGP pgp = new PGP(encryptionKeys))
             {
                 Stream outputStream = new MemoryStream();
-
+                outputStream.Flush();
                 using (inputStream)
                 using (Stream privateKeyStream = privateKey.ToStream())
                 {
-                    await pgp.DecryptStreamAsync(inputStream, outputStream, privateKeyStream, passPhrase);
+                    await pgp.DecryptStreamAsync(inputStream, outputStream);
                     outputStream.Seek(0, SeekOrigin.Begin);
                     return outputStream;
                 }
             }
         }
 
+
+
+
+        private static async Task<Stream> EncryptAsync(Stream inputStream, string publicKey, string passPhrase)
+        {
+            EncryptionKeys encryptionKeys;
+            using (Stream publicKeyStream = publicKey.ToStream())
+                encryptionKeys = new EncryptionKeys(publicKeyStream);
+
+            using (PGP pgp = new PGP(encryptionKeys))
+            {
+                Stream outputStream = new MemoryStream();
+                outputStream.Flush();
+                using (inputStream)
+                using(Stream publicKeyStream = publicKey.ToStream())
+                { 
+                    await pgp.EncryptStreamAsync(inputStream, outputStream);
+                    outputStream.Seek(0, SeekOrigin.Begin);
+                    return outputStream;
+                }
+            }
+        }
     }
 }
